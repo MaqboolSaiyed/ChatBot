@@ -19,7 +19,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from enum import Enum
 
-from langchain_ollama import OllamaEmbeddings, ChatOllama
+import google.generativeai as genai
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
@@ -46,15 +46,30 @@ PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", ModelType.PRIMARY)
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", ModelType.FALLBACK)
 SUMMARIZER_MODEL = os.getenv("SUMMARIZER_MODEL", ModelType.SUMMARIZER)
 
-# Initialize components
-print("Loading embeddings & vector store...")
-try:
-    embeddings = OllamaEmbeddings(model=ModelType.EMBEDDING)
-    print(f"Successfully loaded embedding model: {ModelType.EMBEDDING}")
-except Exception as e:
-    print(f"Error loading embedding model: {e}")
-    print("Falling back to default model...")
-    embeddings = OllamaEmbeddings()  # Use default model
+# Configure Gemini API key
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=GEMINI_API_KEY)
+
+# Initialize Gemini model for generation
+gemini_model = genai.GenerativeModel('gemini-pro')
+
+# Embedding function using Gemini
+# (Gemini embedding API: model='models/embedding-001')
+def embed_with_gemini(text):
+    result = genai.embed_content(
+        model="models/embedding-001",
+        content=text,
+        task_type="retrieval_document",
+        title="Embedding"
+    )
+    return result['embedding']
+
+# Replace OllamaEmbeddings with Gemini embedding wrapper
+class GeminiEmbeddings:
+    def embed_query(self, text):
+        return embed_with_gemini(text)
+
+embeddings = GeminiEmbeddings()
 
 # Load FAISS index
 index_path = Path(INDEX_DIR)
@@ -105,63 +120,6 @@ retriever_similarity = vectorstore.as_retriever(
     search_kwargs={"k": 6}
 )
 print("Similarity retriever configured")
-
-# Initialize LLMs with different models
-print("Loading LLMs...")
-llm_primary = ChatOllama(
-    model=PRIMARY_MODEL,
-    temperature=0.3,
-    top_p=0.9,
-    timeout=60
-)
-
-llm_fallback = ChatOllama(
-    model=FALLBACK_MODEL,
-    temperature=0.4,
-    top_p=0.9,
-    timeout=60
-)
-
-llm_summarizer = ChatOllama(
-    model=SUMMARIZER_MODEL,
-    temperature=0.5,
-    top_p=0.95,
-    timeout=90
-)
-
-# Custom prompt for QA
-QA_PROMPT = PromptTemplate(
-    template="""Use the following pieces of context to answer the question at the end. 
-    If you don't know the answer, just say that you don't know, don't try to make up an answer.
-    
-    Context:
-    {context}
-    
-    Question: {question}
-    
-    Answer in a clear, concise, and helpful manner. If the answer contains multiple points, use bullet points.
-    """,
-    input_variables=["context", "question"]
-)
-
-# Set up QA chains
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm_primary,
-    chain_type="stuff",
-    retriever=retriever_mmr,
-    return_source_documents=True,
-    chain_type_kwargs={"prompt": QA_PROMPT},
-    verbose=True
-)
-
-qa_chain_fallback = RetrievalQA.from_chain_type(
-    llm=llm_fallback,
-    chain_type="stuff",
-    retriever=retriever_similarity,  # Try different retriever for fallback
-    return_source_documents=True,
-    chain_type_kwargs={"prompt": QA_PROMPT},
-    verbose=True
-)
 
 # Initialize FastAPI
 app = FastAPI(title="Changi RAG Chatbot", version="1.0")
@@ -252,48 +210,11 @@ class ChatResponse(BaseModel):
 # -------------------------
 # Chat Endpoint
 # -------------------------
-async def generate_with_fallback(question: str, context: str) -> Dict[str, Any]:
-    """Generate answer with primary model, falling back to secondary if needed."""
-    try:
-        print("\n--- Trying primary model ---")
-        # Try primary model first
-        result = await qa_chain.acall({"query": question, "context": context})
-        answer = format_answer(result.get("result", ""))
-        print(f"Primary model response: {answer[:200]}...")
-        
-        # Check answer quality
-        if is_high_quality(answer):
-            print("Primary model response is good quality")
-            return {
-                "answer": answer, 
-                "source_docs": result.get("source_documents", []), 
-                "model": "primary"
-            }
-        else:
-            print("Primary model response failed quality check")
-            
-    except Exception as e:
-        print(f"Primary model failed: {e}")
-    
-    # Fallback to secondary model
-    try:
-        print("\n--- Trying fallback model ---")
-        result = await qa_chain_fallback.acall({"query": question, "context": context})
-        answer = format_answer(result.get("result", ""))
-        print(f"Fallback model response: {answer[:200]}...")
-        
-        return {
-            "answer": answer, 
-            "source_docs": result.get("source_documents", []), 
-            "model": "fallback"
-        }
-    except Exception as e:
-        print(f"Fallback model failed: {e}")
-        return {
-            "answer": "I'm having trouble answering that right now. Please try rephrasing your question.", 
-            "source_docs": [], 
-            "model": "error"
-        }
+async def generate_with_fallback(question: str, context: str) -> dict:
+    prompt = f"Use the following context to answer the question.\n\nContext:\n{context}\n\nQuestion: {question}\n\nAnswer:"
+    response = gemini_model.generate_content(prompt)
+    answer = response.text.strip() if hasattr(response, 'text') else str(response)
+    return {"answer": answer, "source_docs": [], "model": "gemini-pro"}
 
 async def summarize_response(text: str) -> str:
     """Improve response quality using summarization model."""
@@ -309,10 +230,10 @@ async def summarize_response(text: str) -> str:
         Improved response:"""
         
         # Generate the improved response
-        response = await llm_summarizer.agenerate([[{"role": "user", "content": prompt}]])
+        response = gemini_model.generate_content(prompt)
         
-        if response and hasattr(response, 'generations') and response.generations:
-            improved_text = response.generations[0][0].text.strip()
+        if response and hasattr(response, 'text') and response.text:
+            improved_text = response.text.strip()
             print(f"Improved response: {improved_text[:200]}...")
             return improved_text
         

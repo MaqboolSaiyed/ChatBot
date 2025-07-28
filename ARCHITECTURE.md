@@ -15,7 +15,7 @@ graph TD
         C
         D
         E[FAISS Vector Store]
-        F[Ollama LLM]
+        F[Gemini LLM (Google Generative AI)]
     end
     
     C -->|Search| E
@@ -25,7 +25,7 @@ graph TD
 
 ## Component Details
 
-### 1. FastAPI Server (`app.py`)
+### 1. FastAPI Server (`main.py`)
 - Handles HTTP requests and WebSocket connections
 - Manages chat sessions
 - Routes requests to appropriate handlers
@@ -38,9 +38,8 @@ graph TD
 - Handles fallback retrieval strategies
 
 ### 3. LLM Generation
-- Primary model: Mistral (via Ollama)
-- Fallback model: Llama2 (via Ollama)
-- Response improvement through summarization
+- Primary model: Gemini Pro (Google Generative AI)
+- Response improvement through prompt engineering
 - Quality checking and validation
 
 ### 4. Vector Store (FAISS)
@@ -58,7 +57,7 @@ sequenceDiagram
     participant A as FastAPI
     participant R as Retriever
     participant V as FAISS
-    participant L as LLM (Ollama)
+    participant L as LLM (Gemini)
     
     U->>W: Enters question
     W->>A: POST /chat
@@ -74,15 +73,15 @@ sequenceDiagram
 
 ## Performance Considerations
 
-1. **Embedding Model**: Using `all-minilm` for fast, local embeddings
+1. **Embedding Model**: Using Gemini Embeddings for cloud-based vectorization
 2. **Retrieval**: FAISS for efficient similarity search
 3. **Caching**: Session-based caching of common queries
 4. **Batching**: Parallel processing where possible
-5. **Fallbacks**: Multiple models for reliability
+5. **Fallbacks**: Prompt engineering for reliability
 
 ## Scaling
 
 - **Horizontal Scaling**: Stateless API allows multiple instances
 - **Vector DB**: Can be replaced with distributed vector DB if needed
-- **Model Serving**: Ollama can be scaled separately
+- **Model Serving**: Gemini API is cloud-hosted
 - **Caching**: Add Redis/Memcached for frequent queries

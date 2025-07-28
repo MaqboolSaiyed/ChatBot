@@ -8,8 +8,25 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import FAISS
+import google.generativeai as genai
+import os
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=GEMINI_API_KEY)
+
+def embed_with_gemini(text):
+    result = genai.embed_content(
+        model="models/embedding-001",
+        content=text,
+        task_type="retrieval_document",
+        title="Embedding"
+    )
+    return result['embedding']
+
+class GeminiEmbeddings:
+    def embed_query(self, text):
+        return embed_with_gemini(text)
 
 
 def load_jsonl(path: Path):
@@ -41,7 +58,7 @@ def build_faiss_index(documents, out_dir: Path):
     
     # Use the same embedding model as in app.py
     print("Initializing embedding model...")
-    embedder = OllamaEmbeddings(model="all-minilm")
+    embedder = GeminiEmbeddings()
     
     # Test the embedding model
     try:

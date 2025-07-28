@@ -70,9 +70,8 @@ GET /health
   "status": "ok",
   "version": "1.0.0",
   "models": {
-    "primary": "mistral",
-    "fallback": "llama2",
-    "embedding": "all-minilm"
+    "llm": "gemini-pro",
+    "embedding": "models/embedding-001"
   }
 }
 ```
@@ -125,6 +124,7 @@ API versioning is not currently implemented. All endpoints are under v1.
 
 ## Changelog
 - 2025-07-28: Initial API release
+- 2025-07-29: Migrated to Gemini API for LLM and embeddings
 
 ## Future Improvements
 1. Add authentication
