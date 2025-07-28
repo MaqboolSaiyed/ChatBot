@@ -2,9 +2,6 @@
 
 Usage:
     uvicorn app:app --reload --port 8000
-
-Environment variables:
-    OPENAI_API_KEY   (required) – your OpenAI API key
 """
 
 import os
