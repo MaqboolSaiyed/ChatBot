@@ -29,6 +29,8 @@ class GeminiEmbeddings:
         return embed_with_gemini(text)
     def __call__(self, text):
         return self.embed_query(text)
+    def embed_documents(self, texts):
+        return [self.embed_query(t) for t in texts]
 
 
 def load_jsonl(path: Path):

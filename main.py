@@ -51,7 +51,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Initialize Gemini model for generation
-gemini_model = genai.GenerativeModel('gemini-pro')
+gemini_model = genai.GenerativeModel('models/gemini-1.5-pro-latest')
 
 # Embedding function using Gemini
 # (Gemini embedding API: model='models/embedding-001')
@@ -70,6 +70,8 @@ class GeminiEmbeddings:
         return embed_with_gemini(text)
     def __call__(self, text):
         return self.embed_query(text)
+    def embed_documents(self, texts):
+        return [self.embed_query(t) for t in texts]
 
 embeddings = GeminiEmbeddings()
 
